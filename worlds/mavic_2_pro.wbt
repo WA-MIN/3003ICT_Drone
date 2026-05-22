@@ -12,6 +12,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3Simple.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
 
 WorldInfo {
   info [
@@ -26,8 +27,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.11224296887031553 -0.10699356995022415 0.9879037867770747 4.519236789527771
-  position 2.3632394215842467 14.918146264074963 7.904770325723425
+  orientation 0.02311317908565312 -0.029051609015967032 0.999310654884725 1.3447646438015353
+  position 0.7568610211178596 2.205797382961695 1.1197917806267594
   near 0.2
   follow "Mavic 2 PRO"
   followSmoothness 0.2
@@ -43,8 +44,16 @@ Floor {
   appearance SandyGround {
   }
 }
+Pedestrian {
+  translation 4.86 11.45 1.27
+  controllerArgs [
+    "--speed=1"
+    "--trajectory=4.86 11.45 1.27 8.0 11.45 1.27 4.86 11.45 1.27"
+  ]
+  enableBoundingObject TRUE
+}
 SolidBox {
-  translation -6.21 -6.28 2
+  translation -6.21 6.74 2
   size 1 1 1
   appearance PBRAppearance {
     baseColor 1 0 0
@@ -93,15 +102,73 @@ TeslaModel3Simple {
   rotation 0 0 1 -0.2618053071795865
 }
 Mavic2Pro {
-  hidden position_0_0 -0.126744537564482
-  hidden rotation_5 0 0 -1 0.12674453756448176
-  hidden position_5_0 -5.8696943365622376e-05
-  hidden rotation_6 0 -1 0 5.8696943120994084e-05
-  hidden position_6_0 -0.005491758269888125
-  hidden rotation_7 -1 0 0 0.005491758269919082
-  translation 0 0 0
-  rotation 0 0 1 3.110293895646356
-  controller "my_controller_2"
+  hidden position_0_0 -0.12674452411670883
+  hidden linearVelocity_0 0.7289054421021912 -1.7026734321556747 -1.0467088624785854
+  hidden angularVelocity_0 187.3340157674015 89.0038852806294 31.5856389423004
+  hidden rotation_9 0 0 -1 0.1267445241167105
+  hidden position_9_0 -0.027823824580372455
+  hidden linearVelocity_9 -2.2005600060711186 2.654098376275031 2.356733383273434
+  hidden angularVelocity_9 187.33401945054345 89.00388806822666 31.58563981212447
+  hidden rotation_10 0 -1 0 0.02782382458037688
+  hidden position_10_0 0.46966776713593966
+  hidden linearVelocity_10 -1.5805129798866413 1.9051918504723648 0.8865741689214535
+  hidden angularVelocity_10 185.55264741814844 87.42791137139542 36.77204600015941
+  hidden rotation_11 0.9999999999999999 0 0 0.4696677671359394
+  hidden linearVelocity_11 -0.661654568945833 1.0600123482863932 -1.5860985158067973
+  hidden angularVelocity_11 185.26148848332147 87.35566782250822 36.65045016104872
+  translation 0.13459984722595103 -0.29769245821882284 0.32483669702259216
+  rotation 0.11870846324859684 0.10077936558471773 -0.9878015085155004 2.8413307099285334
+  controller "my_controller_3"
+  bodySlot [
+    DistanceSensor {
+      translation 0.1 0 0
+      name "sonar_front"
+      type "sonar"
+      numberOfRays 5
+      aperture 0.3
+    }
+    LED {
+      children [
+        PointLight {
+          attenuation 0 0 1
+          color 0 0 1
+          location 0 0.3 0
+        }
+      ]
+      name "led_blue"
+      color [
+        0 0 1
+      ]
+      gradual TRUE
+    }
+    LED {
+      children [
+        PointLight {
+          attenuation 0 0 1
+          color 0 0 0
+          location 0 0.3 0
+          on FALSE
+        }
+      ]
+      name "led_yellow"
+      color [
+        1 1 0
+      ]
+      gradual TRUE
+    }
+    LED {
+      children [
+        PointLight {
+          attenuation 0 0 1
+          color 0 0 0
+          location 0 0.3 0
+          on FALSE
+        }
+      ]
+      name "led_red"
+      gradual TRUE
+    }
+  ]
   cameraSlot [
     Camera {
       recognitionColors [
