@@ -85,8 +85,11 @@ CAM_H = camera.getHeight()
 DESIRED_HEIGHT_RATIO = 0.60   # target object height as fraction of frame
 
 # ── Sonar constants ───────────────────────────────────────────────────────────
-SONAR_DANGER  = 0.5   # metres — emergency hover
-SONAR_CAUTION = 1.0   # metres — slow down during patrol
+# Sonar returns 0 (obstacle) to maxValue (clear). Default maxValue=1000.
+# Lower value = closer obstacle.
+SONAR_DANGER  = 3  # emergency hover (obstacle very close)
+SONAR_CAUTION = 5  # slow patrol (obstacle nearby)
+SONAR_SMOOTH  = 5     # frames to average
 
 # ── Motion detection constants ────────────────────────────────────────────────
 MOTION_THRESHOLD   = 1.5   # average per-channel pixel diff to count as motion
@@ -98,6 +101,8 @@ TAKEOFF = 'TAKEOFF'
 PATROL  = 'PATROL'
 TRACK   = 'TRACK'
 ASSESS  = 'ASSESS'
+LAND = "LAND"
+AVOID = "AVOID"
 
 # ── State variables ───────────────────────────────────────────────────────────
 state      = TAKEOFF
@@ -109,6 +114,7 @@ sq_timer     = 0.0
 sq_turning   = False
 
 lost_frames  = 0
+sonar_readings = []
 
 assess_timer  = 0.0
 prev_image    = None
@@ -158,13 +164,28 @@ def detect_motion():
     return avg_diff > MOTION_THRESHOLD
 
 # ── Sonar check ───────────────────────────────────────────────────────────────
+# ── Sonar check (REVISED) ─────────────────────────────────────────────────────
+def update_sonar():
+    """Reads the sensor ONCE per frame and updates the sliding window."""
+    global sonar_readings
+    val = sonar.getValue()
+    # Use >= 0 to ensure we don't ignore dead-on 0.0m collisions
+    if val >= 0: 
+        sonar_readings.append(val)
+    if len(sonar_readings) > SONAR_SMOOTH:
+        sonar_readings.pop(0)
+
+def get_sonar_avg():
+    """Returns the current smoothed average without mutating the list."""
+    if not sonar_readings:
+        return 999.0  # no valid readings yet — assume clear
+    return sum(sonar_readings) / len(sonar_readings)
+
 def obstacle_near():
-    """Returns True if sonar detects an obstacle within danger threshold."""
-    return sonar.getValue() < SONAR_DANGER
+    return get_sonar_avg() < SONAR_DANGER
 
 def obstacle_caution():
-    """Returns True if sonar detects an obstacle within caution threshold."""
-    return sonar.getValue() < SONAR_CAUTION
+    return get_sonar_avg() < SONAR_CAUTION
 
 # ── Motor mixer ───────────────────────────────────────────────────────────────
 def apply_motors(roll_d, pitch_d, yaw_d, altitude, roll, pitch, roll_vel, pitch_vel):
@@ -214,13 +235,18 @@ while robot.step(timestep) != -1:
     roll_d  = 0.0
     pitch_d = 0.0
     yaw_d   = 0.0
+    
+    update_sonar()
 
     # ── SONAR FAIL-SAFE (overrides all states) ────────────────────────────────
-    if obstacle_near():
-        print(f'[Tribo | SAFETY] Obstacle within {SONAR_DANGER}m — emergency hover!')
-        set_leds(yellow=1)
-        apply_motors(0, 0, 0, altitude, roll, pitch, roll_vel, pitch_vel)
-        continue
+    if obstacle_near() and state not in [LAND, AVOID]:
+        if state == TAKEOFF:
+            state = LAND
+            print(f'[Tribo | SAFETY] Obstacle detected on takeoff. Landing.')
+        else:     
+            print(f'[Tribo | SAFETY] Obstacle within {SONAR_DANGER}m! Braking and turning around.')
+            state = AVOID
+            avoid_timer = 0.0
 
     # ── TAKEOFF ───────────────────────────────────────────────────────────────
     if state == TAKEOFF:
@@ -365,6 +391,38 @@ while robot.step(timestep) != -1:
                     print(f'[Tribo | ASSESS] Assessment complete. Resuming PATROL.')
                     state = PATROL
                     reset_assess()
+                    
+    elif state == LAND:
+        target_alt = 0
+        set_leds(blue=1)
+        # 3. FIX: Compare actual altitude against the tolerance threshold
+        if altitude < ALT_REACHED:
+            print(f'Safely landed')
+            apply_motors(0,0,0,0,0,0,0,0)
+            continue # Skip motor application so they stay off
+    # ── AVOID ─────────────────────────────────────────────────────────────────
+    elif state == AVOID:
+        set_leds(red=1, yellow=1)
+        target_alt = PATROL_ALT  # Maintain current altitude
+        avoid_timer += dt
+        
+        # Phase 1: Hard brake (0.0 to 0.8s)
+        if avoid_timer < 0.8:
+            pitch_d = PATROL_SPEED  # Pitch backward to counter forward momentum
+            yaw_d = 0.0
+            
+        # Phase 2: Spin 180 degrees in place
+        elif avoid_timer < (0.8 + SQUARE_TURN_TIME):
+            pitch_d = 0.0
+            yaw_d = -1.3            # Use the exact same yaw rate as your patrol turns
+            
+        # Phase 3: Resume patrol in the opposite direction
+        else:
+            print(f'[Tribo | AVOID] Turnaround complete. Resuming PATROL.')
+            state = PATROL
+            sq_timer = 0.0          # Reset patrol leg timer
+            sq_turning = False      # Ensure it starts flying straight immediately
+        
 
     # ── Motor mixer ───────────────────────────────────────────────────────────
     apply_motors(roll_d, pitch_d, yaw_d,
