@@ -1,62 +1,19 @@
-# tribo_controller_triage.py
-# FSM: TAKEOFF -> PATROL -> TRACK -> ASSESS
-#
-# Inputs:
-#   (1) Camera          — Pedestrian detection, tracking, motion detection
-#   (2) Sonar           — Obstacle avoidance / collision fail-safe (vision-independent)
-#
-# Outputs:
-#   (1) Motors          — Flight control
-#   (2) LED x3          — Triage status (blue=patrol, yellow=track/scan, red=critical, green=mobile)
-#
-# .wbt additions required:
-#   bodySlot [
-#     LED { name "led_blue"   color 0 0 1   gradual TRUE }
-#     LED { name "led_yellow" color 1 1 0   gradual TRUE }
-#     LED { name "led_red"    color 1 0 0   gradual TRUE }
-#     DistanceSensor {
-#       name "sonar_front"
-#       translation 0.1 0 0
-#       type "sonar"
-#       aperture 0.3
-#       numberOfRays 5
-#       maxValue 5.0
-#     }
-#   ]
-
 from controller import Robot
 
-# ── Utility ───────────────────────────────────────────────────────────────────
+#Setup
 def clamp(value, low, high):
     return max(low, min(value, high))
-
-# ── Robot and timestep ────────────────────────────────────────────────────────
+    
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 print(f'[Tribo] Controller started — timestep={timestep} ms')
 
-# ── Devices ───────────────────────────────────────────────────────────────────
+#Drone setting
 imu  = robot.getDevice('inertial unit'); imu.enable(timestep)
 gps  = robot.getDevice('gps');           gps.enable(timestep)
 gyro = robot.getDevice('gyro');          gyro.enable(timestep)
 
-camera = robot.getDevice('camera')
-camera.enable(timestep)
-camera.recognitionEnable(timestep)
-
-camera_roll_motor  = robot.getDevice('camera roll')
-camera_pitch_motor = robot.getDevice('camera pitch')
-
-# Sonar — vision-independent obstacle avoidance
-sonar = robot.getDevice('sonar_front')
-sonar.enable(timestep)
-
-# LEDs — 3 colours in body slot
-led_blue   = robot.getDevice('led_blue')
-led_yellow = robot.getDevice('led_yellow')
-led_red    = robot.getDevice('led_red')
-
-# Propellers
+#Drone propellers
 fl = robot.getDevice('front left propeller')
 fr = robot.getDevice('front right propeller')
 rl = robot.getDevice('rear left propeller')
@@ -65,47 +22,67 @@ for m in [fl, fr, rl, rr]:
     m.setPosition(float('inf'))
     m.setVelocity(1.0)
 
-# ── PID & Flight constants ────────────────────────────────────────────────────
+#Camera 
+camera = robot.getDevice('camera')
+camera.enable(timestep)
+camera.recognitionEnable(timestep)
+
+camera_roll_motor  = robot.getDevice('camera roll')
+camera_pitch_motor = robot.getDevice('camera pitch')
+
+# Camera constants
+CAM_W = camera.getWidth()
+CAM_H = camera.getHeight()
+DESIRED_HEIGHT_RATIO = 0.60   # target object height as fraction of frame to decide drone-obejct distance
+
+
+#Sonar to use for collision avoidance
+sonar = robot.getDevice('sonar_front')
+sonar.enable(timestep)
+
+
+# Sonar constants 
+# Sonar returns 0 (obstacle) to maxValue (clear). maxValue=1000 (as default) Lower value means closer obstacle.
+SONAR_DANGER  = 3  # emergency hover (obstacle very close)
+SONAR_CAUTION = 5  # slow patrol (obstacle nearby)
+SONAR_SMOOTH  = 5     # frames to average. avoid going 
+
+
+#LEDs Red, Blue, Yellow
+led_blue   = robot.getDevice('led_blue')
+led_yellow = robot.getDevice('led_yellow')
+led_red    = robot.getDevice('led_red')
+
+
+# PID and Flight Constants
 K_VERTICAL_THRUST  = 68.5
 K_VERTICAL_OFFSET  = 0.6
 K_VERTICAL_P       = 3.0
 K_ROLL_P           = 50.0
 K_PITCH_P          = 30.0
 
-PATROL_ALT       = 2.0   # metres — search altitude
-HOVER_ALT        = 1.5   # metres — tracking / assess altitude
-ALT_REACHED      = 0.2   # metres — altitude tolerance
+PATROL_ALT       = 2.0   # in meters. search altitude
+HOVER_ALT        = 1.5   # in meters. TRACK ASSESS altitude
+ALT_REACHED      = 0.2   # in meters. altitude tolerance
 PATROL_SPEED     = 3.0   # pitch input during patrol legs
 SQUARE_LEG_TIME  = 3.0   # seconds per unit leg
-SQUARE_TURN_TIME = 1.2   # seconds per 90-degree yaw turn
+SQUARE_TURN_TIME = 1.2   # seconds per 90-degree yaw turn -> AVOID state turn 90 degrees
 
-# ── Camera FOV constants ──────────────────────────────────────────────────────
-CAM_W = camera.getWidth()
-CAM_H = camera.getHeight()
-DESIRED_HEIGHT_RATIO = 0.60   # target object height as fraction of frame
-
-# ── Sonar constants ───────────────────────────────────────────────────────────
-# Sonar returns 0 (obstacle) to maxValue (clear). Default maxValue=1000.
-# Lower value = closer obstacle.
-SONAR_DANGER  = 3  # emergency hover (obstacle very close)
-SONAR_CAUTION = 5  # slow patrol (obstacle nearby)
-SONAR_SMOOTH  = 5     # frames to average
-
-# ── Motion detection constants ────────────────────────────────────────────────
+#Motion detection constants ────────────────────────────────────────────────
 MOTION_THRESHOLD   = 1.5   # average per-channel pixel diff to count as motion
 MOTION_SETTLE_TIME = 1.5   # seconds to hover still before sampling
 ASSESS_DURATION    = 4.0   # seconds of observation before verdict
 
-# ── FSM states ────────────────────────────────────────────────────────────────
-TAKEOFF = 'TAKEOFF'
-PATROL  = 'PATROL'
-TRACK   = 'TRACK'
-ASSESS  = 'ASSESS'
-LAND = "LAND"
-AVOID = "AVOID"
+#FSM states 
+TAKEOFF = 'TAKEOFF'  #Beginning
+PATROL  = 'PATROL'   #Search for human
+TRACK   = 'TRACK'    #Follow / Center the human in the camera vision
+ASSESS  = 'ASSESS'   #Assess health condition based on the movement
+LAND = "LAND"        #Safety landing
+AVOID = "AVOID"      #Collision avoidance
 
-# ── State variables ───────────────────────────────────────────────────────────
-state      = TAKEOFF
+#State variables
+state      = TAKEOFF      #Start
 target_alt = PATROL_ALT
 
 sq_leg_len   = 1
@@ -118,12 +95,12 @@ sonar_readings = []
 
 assess_timer  = 0.0
 prev_image    = None
-motion_votes  = 0
+motion_votes  = 0      #Use in ASSESS. assess human movement
 total_votes   = 0
 triage_done   = False
 triage_result = None
 
-# ── LED helpers ───────────────────────────────────────────────────────────────
+#LED helpers
 def leds_off():
     led_blue.set(0)
     led_yellow.set(0)
@@ -134,20 +111,20 @@ def set_leds(blue=0, yellow=0, red=0):
     led_yellow.set(255 if yellow else 0)
     led_red.set(255 if red else 0)
 
-# ── Survivor detection ────────────────────────────────────────────────────────
+#Survivor detection
 def survivor_detected():
-    """Returns (True, obj) if a Pedestrian is visible in camera recognition."""
+    
     for obj in camera.getRecognitionObjects():
         model = obj.getModel().lower()
         if 'pedestrian' in model or 'human' in model:
             return True, obj
     return False, None
 
-# ── Motion detection ──────────────────────────────────────────────────────────
+#Motion detection 
 def detect_motion():
     """
-    Frame-diff motion detection. Only reliable when drone is hovering still.
-    Returns True if mean per-channel pixel change exceeds MOTION_THRESHOLD.
+    Detect motion using frame difference compared to previous image. Only reliable when drone is hovering still.
+    Returns True if mean per-channel pixel change exceeds MOTION_THRESHOLD. (To avoid false assessment due to constant drone position adjustment)
     """
     global prev_image
     current = camera.getImage()
@@ -163,23 +140,21 @@ def detect_motion():
     avg_diff = total_diff / (CAM_W * CAM_H * 3)
     return avg_diff > MOTION_THRESHOLD
 
-# ── Sonar check ───────────────────────────────────────────────────────────────
-# ── Sonar check (REVISED) ─────────────────────────────────────────────────────
+#Sonar Check
 def update_sonar():
-    """Reads the sensor ONCE per frame and updates the sliding window."""
+    #Reads the sensor once per frame and updates the sliding window.
     global sonar_readings
     val = sonar.getValue()
-    # Use >= 0 to ensure we don't ignore dead-on 0.0m collisions
     if val >= 0: 
         sonar_readings.append(val)
     if len(sonar_readings) > SONAR_SMOOTH:
         sonar_readings.pop(0)
 
 def get_sonar_avg():
-    """Returns the current smoothed average without mutating the list."""
+    
     if not sonar_readings:
         return 999.0  # no valid readings yet — assume clear
-    return sum(sonar_readings) / len(sonar_readings)
+    return sum(sonar_readings) / len(sonar_readings)   #return average 
 
 def obstacle_near():
     return get_sonar_avg() < SONAR_DANGER
@@ -187,7 +162,7 @@ def obstacle_near():
 def obstacle_caution():
     return get_sonar_avg() < SONAR_CAUTION
 
-# ── Motor mixer ───────────────────────────────────────────────────────────────
+#Motor mixer 
 def apply_motors(roll_d, pitch_d, yaw_d, altitude, roll, pitch, roll_vel, pitch_vel):
     clamped_diff   = clamp(target_alt - altitude + K_VERTICAL_OFFSET, -1.0, 1.0)
     vertical_input = K_VERTICAL_P * (clamped_diff ** 3)
@@ -203,7 +178,7 @@ def apply_motors(roll_d, pitch_d, yaw_d, altitude, roll, pitch, roll_vel, pitch_
     camera_pitch_motor.setPosition(clamp(-0.1   * pitch_vel, -0.5, 0.5))
     camera_roll_motor.setPosition( clamp(-0.115 * roll_vel,  -0.5, 0.5))
 
-# ── ASSESS reset ──────────────────────────────────────────────────────────────
+#ASSESS reset to keep monitoring
 def reset_assess():
     global assess_timer, prev_image, motion_votes, total_votes, triage_done, triage_result
     assess_timer  = 0.0
@@ -213,7 +188,7 @@ def reset_assess():
     triage_done   = False
     triage_result = None
 
-# ── Physics warmup ────────────────────────────────────────────────────────────
+#Physics warmup 
 leds_off()
 while robot.step(timestep) != -1:
     if robot.getTime() > 1.0:
@@ -221,8 +196,7 @@ while robot.step(timestep) != -1:
 
 print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
-while robot.step(timestep) != -1:
+#Main loop 
 
     dt      = timestep / 1000.0
     gps_pos = gps.getValues()
@@ -238,7 +212,7 @@ while robot.step(timestep) != -1:
     
     update_sonar()
 
-    # ── SONAR FAIL-SAFE (overrides all states) ────────────────────────────────
+    #SONAR FAIL-SAFE (overrides all states) 
     if obstacle_near() and state not in [LAND, AVOID]:
         if state == TAKEOFF:
             state = LAND
@@ -248,7 +222,7 @@ while robot.step(timestep) != -1:
             state = AVOID
             avoid_timer = 0.0
 
-    # ── TAKEOFF ───────────────────────────────────────────────────────────────
+    #TAKEOFF State Drone takes off
     if state == TAKEOFF:
         target_alt = PATROL_ALT
         set_leds(blue=1)
@@ -256,7 +230,7 @@ while robot.step(timestep) != -1:
             print(f'[Tribo | TAKEOFF] Reached {altitude:.2f}m. Starting PATROL.')
             state = PATROL
 
-    # ── PATROL ────────────────────────────────────────────────────────────────
+    #PATROL State search for human
     elif state == PATROL:
         target_alt = PATROL_ALT
         set_leds(blue=1)
@@ -288,7 +262,7 @@ while robot.step(timestep) != -1:
                     sq_turning = False
                     sq_timer   = 0.0
 
-    # ── TRACK ─────────────────────────────────────────────────────────────────
+    #TRACK adjust drone position, get ready to assess
     elif state == TRACK:
         set_leds(yellow=1)
         if target_alt > HOVER_ALT:
@@ -318,7 +292,7 @@ while robot.step(timestep) != -1:
             # Yaw to centre horizontally
             yaw_d = clamp(-0.003 * center_err_x, -0.4, 0.4) if abs(center_err_x) > 20 else 0.0
 
-            # Pitch for distance — only when roughly centred
+            # Pitch for distance, only when roughly centred
             if abs(center_err_x) > 30:
                 pitch_d = 0.0
             elif height_ratio > DESIRED_HEIGHT_RATIO:
@@ -335,7 +309,7 @@ while robot.step(timestep) != -1:
                 leds_off()
                 pitch_d = 0.0
 
-    # ── ASSESS ────────────────────────────────────────────────────────────────
+    #ASSESS
     elif state == ASSESS:
         target_alt = HOVER_ALT
         assess_timer += dt
@@ -356,7 +330,8 @@ while robot.step(timestep) != -1:
                 if assess_timer <= MOTION_SETTLE_TIME:
                     # Settling — blink blue slowly
                     set_leds(blue = 1 if int(assess_timer * 2) % 2 == 0 else 0)
-                    print(f'[DEBUG | ASSESS] Settling {assess_timer:.1f}s / {MOTION_SETTLE_TIME}s')
+                    #print(f'[DEBUG | ASSESS] Settling {assess_timer:.1f}s / {MOTION_SETTLE_TIME}s')
+                    print(f'[Tribo | ASSESS] Assessing')
                 else:
                     # Sampling — blink yellow rapidly
                     set_leds(yellow = 1 if int(assess_timer * 6) % 2 == 0 else 0)
@@ -366,8 +341,9 @@ while robot.step(timestep) != -1:
                     if motion:
                         motion_votes += 1
 
-                    print(f'[DEBUG | ASSESS] t={assess_timer:.1f}s  '
-                          f'motion={motion}  votes={motion_votes}/{total_votes}')
+                    #print(f'[DEBUG | ASSESS] t={assess_timer:.1f}s  '
+                    #     f'motion={motion}  votes={motion_votes}/{total_votes}')
+                    print(f'[Tribo | ASSESS] Keep Assessing')
 
                     if assess_timer >= MOTION_SETTLE_TIME + ASSESS_DURATION:
                         motion_ratio = motion_votes / total_votes if total_votes > 0 else 0
@@ -386,21 +362,22 @@ while robot.step(timestep) != -1:
                         print(f'[Tribo | ASSESS] ║  Motion ratio : {motion_ratio:.2f} ({motion_votes}/{total_votes} frames)')
                         print(f'[Tribo | ASSESS] ╚═══════════════════╝')
             else:
-                # Hold 5 s with result LED then resume patrol
+                # Hold 5 s with result LED go back into patrol mode. It detects the survivor again and run assessment. The drone keeps monitoring the survivor
                 if assess_timer >= MOTION_SETTLE_TIME + ASSESS_DURATION + 5.0:
                     print(f'[Tribo | ASSESS] Assessment complete. Resuming PATROL.')
                     state = PATROL
                     reset_assess()
-                    
-    elif state == LAND:
+    
+    #LAND State safety landing               
+    elif state == LAND: 
         target_alt = 0
         set_leds(blue=1)
-        # 3. FIX: Compare actual altitude against the tolerance threshold
+        # FIX: Compare actual altitude against the tolerance threshold
         if altitude < ALT_REACHED:
             print(f'Safely landed')
             apply_motors(0,0,0,0,0,0,0,0)
             continue # Skip motor application so they stay off
-    # ── AVOID ─────────────────────────────────────────────────────────────────
+    #AVOID State  
     elif state == AVOID:
         set_leds(red=1, yellow=1)
         target_alt = PATROL_ALT  # Maintain current altitude
@@ -424,6 +401,6 @@ while robot.step(timestep) != -1:
             sq_turning = False      # Ensure it starts flying straight immediately
         
 
-    # ── Motor mixer ───────────────────────────────────────────────────────────
+    #Motor mixer 
     apply_motors(roll_d, pitch_d, yaw_d,
                  altitude, roll, pitch, roll_vel, pitch_vel)

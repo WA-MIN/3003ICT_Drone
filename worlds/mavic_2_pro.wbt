@@ -27,8 +27,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.5773502691896258 0.5773502691896258 0.5773502691896258 2.0943999999999994
-  position 0.24548545671183 1.5693624506000734 22.19595943726721
+  orientation -0.5213734890892918 -0.5811950409957864 0.6248055771172055 4.35833723322452
+  position -0.8840053330266037 1.6087983311465615 5.2658370948442705
   near 0.2
   follow "Mavic 2 PRO"
   followSmoothness 0.2
@@ -45,7 +45,7 @@ Floor {
   }
 }
 SolidBox {
-  translation -6.53 0.57 1.5
+  translation -5.06 6.42 2.23
   name "box(4)"
   size 1 1 1
   appearance PBRAppearance {
@@ -103,22 +103,14 @@ TeslaModel3Simple {
   rotation 0 0 1 -0.2618053071795865
 }
 Mavic2Pro {
-  hidden position_0_0 -0.12674450946649923
-  hidden linearVelocity_0 -0.08157532130809837 0.035758241082906254 -0.21510175039919094
-  hidden angularVelocity_0 -0.1949007357327425 -0.12133810078247037 0.012088090159465187
-  hidden rotation_9 0 0 -1 0.1267445094665001
-  hidden position_9_0 -4.0072739159607887e-07
-  hidden linearVelocity_9 -0.08418563719880987 0.03794197864120227 -0.2352688613399833
-  hidden angularVelocity_9 -0.1949007355104495 -0.12133810100959684 0.012088076524312052
-  hidden rotation_10 0 -1 0 4.009492411337415e-07
-  hidden position_10_0 -1.561973008712414e-07
-  hidden linearVelocity_10 -0.08353975741167247 0.0370236918135814 -0.23407258846649504
-  hidden angularVelocity_10 -0.19490189015245563 -0.12134226058017793 0.012088135316791747
-  hidden rotation_11 -1 0 0 1.5485740967710712e-07
-  hidden linearVelocity_11 -0.08240192040309764 0.035313946720098244 -0.2328894047367023
-  hidden angularVelocity_11 -0.1949035168020407 -0.12134180952446465 0.012088101105443182
-  translation -0.774440005021353 0.3707371942258929 0.15674560006079863
-  rotation -0.008857882323174445 0.009037004345914606 0.9999199320311605 2.9977619414604555
+  hidden position_0_0 -0.12674451084654037
+  hidden rotation_9 0 0 -1 0.1267445108465389
+  hidden position_9_0 -7.972913403862529e-07
+  hidden rotation_10 0 -1 0 7.974557972109163e-07
+  hidden position_10_0 1.68926616320007e-05
+  hidden rotation_11 1 0 0 1.6892659834636166e-05
+  translation 0 0 0
+  rotation 0 0 1 0.7133088844832656
   controller "my_controller_3"
   bodySlot [
     DistanceSensor {
@@ -136,8 +128,9 @@ Mavic2Pro {
       children [
         PointLight {
           attenuation 0 0 1
-          color 0 0 1
+          color 0 0 0
           location 0 0.3 0
+          on FALSE
         }
       ]
       name "led_blue"
@@ -150,9 +143,8 @@ Mavic2Pro {
       children [
         PointLight {
           attenuation 0 0 1
-          color 0 0 0
+          color 1 1 0
           location 0 0.3 0
-          on FALSE
         }
       ]
       name "led_yellow"
