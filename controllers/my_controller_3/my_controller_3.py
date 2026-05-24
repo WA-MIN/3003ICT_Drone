@@ -33,7 +33,7 @@ camera_pitch_motor = robot.getDevice('camera pitch')
 # Camera constants
 CAM_W = camera.getWidth()
 CAM_H = camera.getHeight()
-DESIRED_HEIGHT_RATIO = 0.60   # target object height as fraction of frame to decide drone-obejct distance
+DESIRED_HEIGHT_RATIO = 0.40   # target object height as fraction of frame to decide drone-obejct distance
 
 
 #Sonar to use for collision avoidance
@@ -53,6 +53,8 @@ led_blue   = robot.getDevice('led_blue')
 led_yellow = robot.getDevice('led_yellow')
 led_red    = robot.getDevice('led_red')
 
+#Display
+display = robot.getDevice('display')
 
 # PID and Flight Constants
 K_VERTICAL_THRUST  = 68.5
@@ -62,7 +64,7 @@ K_ROLL_P           = 50.0
 K_PITCH_P          = 30.0
 
 PATROL_ALT       = 2.0   # in meters. search altitude
-HOVER_ALT        = 1.5   # in meters. TRACK ASSESS altitude
+HOVER_ALT        = 2.0   # in meters. TRACK ASSESS altitude
 ALT_REACHED      = 0.2   # in meters. altitude tolerance
 PATROL_SPEED     = 3.0   # pitch input during patrol legs
 SQUARE_LEG_TIME  = 3.0   # seconds per unit leg
@@ -70,8 +72,8 @@ SQUARE_TURN_TIME = 1.2   # seconds per 90-degree yaw turn -> AVOID state turn 90
 
 #Motion detection constants ────────────────────────────────────────────────
 MOTION_THRESHOLD   = 1.5   # average per-channel pixel diff to count as motion
-MOTION_SETTLE_TIME = 1.5   # seconds to hover still before sampling
-ASSESS_DURATION    = 4.0   # seconds of observation before verdict
+MOTION_SETTLE_TIME = 0.5   # seconds to hover still before sampling Changed to 0.5 ASSESS is taking too long.
+ASSESS_DURATION    = 2.0   # seconds of observation before verdict
 
 #FSM states 
 TAKEOFF = 'TAKEOFF'  #Beginning
@@ -99,6 +101,7 @@ motion_votes  = 0      #Use in ASSESS. assess human movement
 total_votes   = 0
 triage_done   = False
 triage_result = None
+
 
 #LED helpers
 def leds_off():
@@ -187,6 +190,33 @@ def reset_assess():
     total_votes   = 0
     triage_done   = False
     triage_result = None
+    
+
+#Display
+def update_display(state, led_blue, led_yellow, led_red, gps_pos, triage_result=None, motion_ratio=None):
+    display.setColor(0x111111)
+    display.fillRectangle(0, 0, 256, 128)  # clear
+
+    # State label
+    display.setColor(0xFFFFFF)
+    display.drawText(f'State: {state}', 10, 8)
+
+    # LED indicators
+    display.setColor(0x0000FF if led_blue   else 0x333333); display.fillRectangle(10,  30, 20, 20)
+    display.setColor(0xFFFF00 if led_yellow else 0x333333); display.fillRectangle(40,  30, 20, 20)
+    display.setColor(0xFF0000 if led_red    else 0x333333); display.fillRectangle(70,  30, 20, 20)
+    display.setColor(0xFFFFFF)
+    display.drawText('B', 15, 35)
+    display.drawText('Y', 45, 35)
+    display.drawText('R', 75, 35)
+
+    # GPS
+    display.drawText(f'GPS: ({gps_pos[0]:.1f}, {gps_pos[1]:.1f}, {gps_pos[2]:.1f})', 10, 62)
+
+    # Triage result (only after ASSESS completes)
+    if triage_result:
+        display.setColor(0xFFFF00 if triage_result == 'ALIVE' else 0xFF0000)
+        display.drawText(triage_result, 10, 88)
 
 #Physics warmup 
 leds_off()
@@ -197,7 +227,7 @@ while robot.step(timestep) != -1:
 print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
 
 #Main loop 
-
+while robot.step(timestep) != -1:
     dt      = timestep / 1000.0
     gps_pos = gps.getValues()
     altitude = gps_pos[2]
@@ -229,11 +259,13 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
         if abs(altitude - PATROL_ALT) < ALT_REACHED:
             print(f'[Tribo | TAKEOFF] Reached {altitude:.2f}m. Starting PATROL.')
             state = PATROL
-
+            update_display(state, 1, 0, 0, gps_pos)
+        
     #PATROL State search for human
     elif state == PATROL:
         target_alt = PATROL_ALT
         set_leds(blue=1)
+        update_display(state, 1, 0, 0, gps_pos)
 
         detected, obj = survivor_detected()
         if detected:
@@ -265,6 +297,7 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
     #TRACK adjust drone position, get ready to assess
     elif state == TRACK:
         set_leds(yellow=1)
+        update_display(state, 0, 1, 0, gps_pos)
         if target_alt > HOVER_ALT:
             target_alt = max(HOVER_ALT, target_alt - 0.5 * dt)
 
@@ -290,14 +323,14 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
                   f'height_ratio={height_ratio:.3f}')
 
             # Yaw to centre horizontally
-            yaw_d = clamp(-0.003 * center_err_x, -0.4, 0.4) if abs(center_err_x) > 20 else 0.0
+            yaw_d = clamp(-0.006 * center_err_x, -0.8, 0.8) if abs(center_err_x) > 20 else 0.0
 
             # Pitch for distance, only when roughly centred
-            if abs(center_err_x) > 30:
+            if abs(center_err_x) > 10:
                 pitch_d = 0.0
-            elif height_ratio > DESIRED_HEIGHT_RATIO:
+            elif height_ratio > (DESIRED_HEIGHT_RATIO + 0.1):
                 pitch_d = 0.6    # too close — back away
-            elif height_ratio < (DESIRED_HEIGHT_RATIO - 0.05):
+            elif height_ratio < (DESIRED_HEIGHT_RATIO - 0.1):
                 pitch_d = -1.0   # too far — approach
             else:
                 # Good position → ASSESS
@@ -330,11 +363,13 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
                 if assess_timer <= MOTION_SETTLE_TIME:
                     # Settling — blink blue slowly
                     set_leds(blue = 1 if int(assess_timer * 2) % 2 == 0 else 0)
+                    update_display(state, 1, 0, 0, gps_pos)
                     #print(f'[DEBUG | ASSESS] Settling {assess_timer:.1f}s / {MOTION_SETTLE_TIME}s')
                     print(f'[Tribo | ASSESS] Assessing')
                 else:
                     # Sampling — blink yellow rapidly
                     set_leds(yellow = 1 if int(assess_timer * 6) % 2 == 0 else 0)
+                    update_display(state, 0, 1, 0, gps_pos)
 
                     motion = detect_motion()
                     total_votes += 1
@@ -351,11 +386,14 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
                         if motion_ratio > 0.3:
                             triage_result = 'ALIVE'
                             leds_off(); set_leds(yellow=1)   # 🟡 conscious, moving
+                            update_display(state, 0, 1, 0, gps_pos, triage_result, motion_ratio)
                         else:
                             triage_result = 'IMMOBILE'
                             leds_off(); set_leds(red=1)      # 🔴 critical, not moving
+                            update_display(state, 0, 0, 1, gps_pos, triage_result, motion_ratio)
 
                         triage_done = True
+                        
                         print(f'[Tribo | ASSESS] ╔══ TRIAGE RESULT ══╗')
                         print(f'[Tribo | ASSESS] ║  {triage_result}')
                         print(f'[Tribo | ASSESS] ║  GPS : ({gps_pos[0]:.2f}, {gps_pos[1]:.2f}, {gps_pos[2]:.2f})')
@@ -372,6 +410,7 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
     elif state == LAND: 
         target_alt = 0
         set_leds(blue=1)
+        update_display(state, 1, 0, 0, gps_pos)
         # FIX: Compare actual altitude against the tolerance threshold
         if altitude < ALT_REACHED:
             print(f'Safely landed')
@@ -380,6 +419,7 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
     #AVOID State  
     elif state == AVOID:
         set_leds(red=1, yellow=1)
+        update_display(state, 0, 1, 1, gps_pos)
         target_alt = PATROL_ALT  # Maintain current altitude
         avoid_timer += dt
         
