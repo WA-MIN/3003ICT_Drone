@@ -349,10 +349,10 @@ print(f'[Tribo | TAKEOFF] Lifting off to {PATROL_ALT}m...')
                         motion_ratio = motion_votes / total_votes if total_votes > 0 else 0
 
                         if motion_ratio > 0.3:
-                            triage_result = 'ALIVE_MOBILE'
+                            triage_result = 'ALIVE'
                             leds_off(); set_leds(yellow=1)   # 🟡 conscious, moving
                         else:
-                            triage_result = 'ALIVE_IMMOBILE'
+                            triage_result = 'IMMOBILE'
                             leds_off(); set_leds(red=1)      # 🔴 critical, not moving
 
                         triage_done = True
