@@ -1,5 +1,8 @@
 # Tribo — Autonomous Search and Rescue Drone Controller
 
+## Repository
+https://github.com/username/tribo-drone
+
 A Webots simulation of an autonomous drone that patrols a search area, detects survivors, assesses their condition using motion detection, and avoids obstacles — built on a finite state machine architecture.
 
 ---
@@ -9,6 +12,29 @@ A Webots simulation of an autonomous drone that patrols a search area, detects s
 - Webots R2023a or later
 - Python 3.8 or later
 - Python modules: `math` (standard library), `controller` (provided by Webots)
+
+---
+
+## How to Replicate
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/username/tribo-drone
+   ```
+2. Place the project folder inside your Webots projects directory.
+3. The folder structure should look like this:
+   ```
+   tribo-drone/
+   ├── worlds/
+   │   └── tribo.wbt
+   ├── controllers/
+   │   └── tribo/
+   │       └── tribo.py
+   └── README.md
+   ```
+4. Open Webots and load `worlds/tribo.wbt`.
+5. In the robot node properties, confirm the controller field is set to `tribo`.
+6. Press play to run the simulation.
 
 ---
 
