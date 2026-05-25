@@ -478,11 +478,11 @@ while robot.step(timestep) != -1:
 
                         triage_done = True
 
-                        print(f'[Tribo | ASSESS] ╔══ TRIAGE RESULT ══╗')
+                        print(f'[Tribo | ASSESS] ╔TRIAGE RESULT ')
                         print(f'[Tribo | ASSESS] ║  {triage_result}')
                         print(f'[Tribo | ASSESS] ║  GPS : ({gps_pos[0]:.2f}, {gps_pos[1]:.2f}, {gps_pos[2]:.2f})')
                         print(f'[Tribo | ASSESS] ║  Motion ratio : {motion_ratio:.2f} ({motion_votes}/{total_votes} frames)')
-                        print(f'[Tribo | ASSESS] ╚═══════════════════╝')
+                        print(f'[Tribo | ASSESS] ╚════════════════')
             else:
                 # Hold 5s showing the result LED, then run another assessment cycle
                 # in place. The drone stays here as long as the survivor is visible.
@@ -513,7 +513,7 @@ while robot.step(timestep) != -1:
             pitch_d = PATROL_SPEED
             yaw_d   = 0.0
 
-        # Phase 2: Spin 180 degrees in place using the same yaw rate as patrol turns
+        # Phase 2: Spin 90 degrees in place using the same yaw rate as patrol turns
         elif avoid_timer < (AVOID_BRAKE_DURATION + SQUARE_TURN_TIME):
             pitch_d = 0.0
             yaw_d   = -1.3
