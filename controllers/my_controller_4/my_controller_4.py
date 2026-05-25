@@ -149,10 +149,6 @@ def detect_motion(obj):
     Returns True if mean per-channel pixel change exceeds MOTION_THRESHOLD.
     """
     global prev_image
-    # Copy bytes explicitly — in some Webots versions getImage() returns a
-    # reference to an internal buffer updated in-place, so storing the raw
-    # return value means prev_image and current always point to the same data
-    # and the diff is always zero.
     current = bytes(camera.getImage())
 
     # Diagnostic — print once per call so we can see what state prev_image is in
