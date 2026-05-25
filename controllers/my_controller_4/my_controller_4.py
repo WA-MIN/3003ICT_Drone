@@ -287,7 +287,7 @@ while robot.step(timestep) != -1:
 
     #SONAR FAIL-SAFE (overrides all states)
     if obstacle_near() and state not in [LAND, AVOID]:
-        if state == TAKEOFF and robot.getTime() > 10.0:
+        if state == TAKEOFF and robot.getTime() > 3.0:  #after the drone takes off from ground.
             state = LAND
             print(f'[Tribo | SAFETY] Obstacle detected on takeoff. Landing.')
         else:
