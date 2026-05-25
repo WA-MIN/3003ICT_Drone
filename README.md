@@ -7,9 +7,37 @@ A Webots simulation of an autonomous drone that patrols a search area, detects s
 
 ---
 
+## Video Presentation
+
+Full quality video (recommended):
+https://griffitheduau-my.sharepoint.com/:v:/g/personal/zara_sypkens_griffithuni_edu_au/IQAQEo7NvRrhTqiJ2BhI1WjFAVIk_XRHbmglKWUZSLmKos4?e=VF6F5W
+
+A low resolution backup copy is also included in the repository as `video_presentation_low.mp4` in case the link above is unavailable.
+
+---
+
+## World File
+
+The simulation runs on Webots R2025a. The world file `tribo.wbt` is based on the default Mavic 2 Pro demo and includes the following custom additions:
+
+**Scene:**
+- Sandy ground floor (400 x 400 m)
+- Small manor building, road, cardboard box, Tesla Model 3, and square manhole as environmental obstacles
+- Two pedestrians — one stationary, one configured to walk a fixed trajectory at speed 1 to simulate a survivor
+
+**Mavic 2 Pro robot node additions:**
+- **Display** (256 x 128) — shows current FSM state, GPS coordinates, and triage result
+- **Front-facing sonar** (`sonar_front`) — DistanceSensor of type sonar, mounted at translation (0.1, 0, 0), lookup table range 0–5 units, 5 rays, aperture 0.3 radians
+- **LED: Blue** (`led_blue`) — gradual LED with a PointLight child, quadratic attenuation, colour (0, 0, 1)
+- **LED: Yellow** (`led_yellow`) — gradual LED with a PointLight child, colour (1, 1, 0)
+- **LED: Red** (`led_red`) — gradual LED with a PointLight child, colour (1, 0, 0)
+- **Camera** (400 x 240) — mounted in cameraSlot with object recognition enabled, max range 20 m, near plane 0.2 m
+
+---
+
 ## Dependencies
 
-- Webots R2023a or later
+- Webots R2025a
 - Python 3.8 or later
 - Python modules: `math` (standard library), `controller` (provided by Webots)
 
@@ -19,7 +47,7 @@ A Webots simulation of an autonomous drone that patrols a search area, detects s
 
 1. Clone the repository:
    ```
-   git clone https://github.com/WA-MIN/3003ICT_Drone.git
+   https://github.com/WA-MIN/3003ICT_Drone.git
    ```
 2. Place the project folder inside your Webots projects directory.
 3. The folder structure should look like this:
@@ -29,7 +57,10 @@ A Webots simulation of an autonomous drone that patrols a search area, detects s
    │   └── mavic_2_pro.wbt
    ├── controllers/
    │   └── my_controller_4/
-   │       └── my_controller_4.py
+   │       └── my_controller_4.py\
+   ├── video_presentation/
+   │   └── Video_Presentation_Original_Quality
+   │   └── 3003ICT - NA7 - Video Presentation - 480p.mov
    └── README.md
    ```
 4. Open Webots and load `worlds/mavic_2_pro.wbt`.
@@ -41,7 +72,7 @@ A Webots simulation of an autonomous drone that patrols a search area, detects s
 ## How to Run
 
 1. Open your Webots world file (`.wbt`) containing the Mavic 2 Pro drone.
-2. In the robot node, set the controller to `my_controller_4` (or the filename of this script).
+2. In the robot node, set the controller to `my_controller_4`.
 3. Place this script in your Webots project under `controllers/my_controller_4/my_controller_4.py`.
 4. Press the play button in Webots to start the simulation.
 5. Console output is prefixed with `[Tribo | STATE]` for easy filtering.
