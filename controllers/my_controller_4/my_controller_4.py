@@ -42,12 +42,9 @@ sonar.enable(timestep)
 
 # Sonar constants
 # Sonar returns 0 (obstacle) to maxValue (clear). maxValue=1000 (as default). Lower value means closer obstacle.
-# Window stores recent readings. We take the MINIMUM (not average) so that any
-# single close reading triggers avoidance immediately — averaging was masking
-# real obstacle detections until the drone was already too close to brake.
-SONAR_DANGER  = 15  # emergency avoid — raised so braking starts with enough clearance
-SONAR_CAUTION = 25  # slow patrol — raised to give early warning
-SONAR_SMOOTH  = 3   # smaller window so the minimum reacts within ~96ms
+SONAR_DANGER  = 3  # emergency hover (obstacle very close)
+SONAR_CAUTION = 5  # slow patrol (obstacle nearby)
+SONAR_SMOOTH  = 5  # frames to average, avoid jitter
 
 #LEDs Red, Blue, Yellow
 led_blue   = robot.getDevice('led_blue')
@@ -87,8 +84,8 @@ AVOID_COAST_TIME     = 0.5   # seconds to hold hover after turn before resuming 
 # NOTE: threshold applies to the bounding-box average only (not full frame),
 # so it should be much lower than a full-frame threshold. A walking pedestrian
 # in Webots typically produces 0.3-0.6 avg diff per pixel per channel.
-MOTION_THRESHOLD   = 0.3   # average per-channel pixel diff within bounding box
-MOTION_SETTLE_TIME = 1.5   # seconds to hover still before sampling. Increased to allow PID to fully damp
+MOTION_THRESHOLD   = 1.5   # average per-channel pixel diff within bounding box 0.3 was too sensitive. 
+MOTION_SETTLE_TIME = 2.5   # seconds to hover still before sampling. Increased to allow PID to fully damp
 ASSESS_DURATION    = 4.0   # seconds of observation — more samples = more reliable verdict
 
 #FSM states
@@ -203,20 +200,18 @@ def update_sonar():
         sonar_readings.append(val)
     if len(sonar_readings) > SONAR_SMOOTH:
         sonar_readings.pop(0)
+    print(f'[SONAR] raw={val:.2f}  avg={get_sonar_avg():.2f}  alt={altitude:.2f}')
 
-def get_sonar_min():
+def get_sonar_avg():
     if not sonar_readings:
         return 999.0  # no valid readings yet — assume clear
-    # Use minimum, not average — any single close reading means react now.
-    # Averaging delays the response by up to SONAR_SMOOTH frames, which at
-    # PATROL_SPEED is enough to drive into an obstacle before braking starts.
-    return min(sonar_readings)
+    return sum(sonar_readings) / len(sonar_readings)   # return average
 
 def obstacle_near():
-    return get_sonar_min() < SONAR_DANGER
+    return get_sonar_avg() < SONAR_DANGER
 
 def obstacle_caution():
-    return get_sonar_min() < SONAR_CAUTION
+    return get_sonar_avg() < SONAR_CAUTION
 
 #Motor mixer
 def apply_motors(roll_d, pitch_d, yaw_d, altitude, roll, pitch, roll_vel, pitch_vel):
@@ -296,19 +291,13 @@ while robot.step(timestep) != -1:
 
     #SONAR FAIL-SAFE (overrides all states)
     if obstacle_near() and state not in [LAND, AVOID]:
-        if state == TAKEOFF:
+        if state == TAKEOFF and robot.getTime() > 10.0:
             state = LAND
             print(f'[Tribo | SAFETY] Obstacle detected on takeoff. Landing.')
         else:
-            print(f'[Tribo | SAFETY] Obstacle within {SONAR_DANGER} units! Braking and turning around.')
-            # Clean up whichever state was interrupted so stale values do not
-            # corrupt the next TRACK or ASSESS cycle after AVOID completes
-            if state == ASSESS:
-                reset_assess()
-            track_locked = False
-            locked_pos   = None
-            state        = AVOID
-            avoid_timer  = 0.0
+            print(f'[Tribo | SAFETY] Obstacle within {SONAR_DANGER}m! Braking and turning around.')
+            state = AVOID
+            avoid_timer = 0.0   # reset timer when newly entering AVOID
 
     #TAKEOFF State — drone takes off
     if state == TAKEOFF:
@@ -512,7 +501,7 @@ while robot.step(timestep) != -1:
             apply_motors(0, 0, 0, 0, 0, 0, 0, 0)
             continue   # skip motor application so they stay off
 
-    #AVOID State — brake, spin 180, coast, resume patrol
+    #AVOID State — brake, spin 90, coast, resume patrol
     elif state == AVOID:
         set_leds(red=1, yellow=1)
         update_display(state, 0, 1, 1, gps_pos)
@@ -524,7 +513,7 @@ while robot.step(timestep) != -1:
             pitch_d = PATROL_SPEED
             yaw_d   = 0.0
 
-        # Phase 2: Spin 90 degrees in place using the same yaw rate as patrol turns
+        # Phase 2: Spin 180 degrees in place using the same yaw rate as patrol turns
         elif avoid_timer < (AVOID_BRAKE_DURATION + SQUARE_TURN_TIME):
             pitch_d = 0.0
             yaw_d   = -1.3
